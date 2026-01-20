@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Fees Dashboard</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- AutoTable -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+<!-- SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js"></script>
+
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#fff; --primary:#2e6df6; --text:#333;
+  }
+
+  body{ font-family:Arial; margin:0; background:var(--bg); }
+  header{ background:var(--primary); color:#fff; padding:16px 24px; font-size:20px; font-weight:bold; }
+
+  .container{ padding:20px; }
+
+  .upload-box{
+    background:#fff; padding:16px; border-radius:12px;
+    margin-bottom:16px; box-shadow:0 6px 14px rgba(0,0,0,.06);
+  }
+
+  input[type=file]{ margin-top:6px; }
+
+  .filters{ display:flex; gap:14px; flex-wrap:wrap; margin:16px 0; }
+  select,input{ padding:8px; border-radius:8px; border:1px solid #ccc; min-width:170px; }
+
+  .cards{ display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+  .card{ background:#fff; padding:16px; border-radius:14px; box-shadow:0 8px 18px rgba(0,0,0,.04); }
+  .card h3{ margin:0; color:#777; font-size:13px; text-transform:uppercase; }
+  .card p{ margin:8px 0 0; font-size:24px; font-weight:bold; }
+
+  .charts{ margin-top:20px; display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(350px,1fr)); }
+  .chart-box{
+    background:#fff;
+    border-radius:14px;
+    padding:16px;
+    min-height:260px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+  }
+  .chart-box canvas{
+    width:80%!important;
+    height:80%!important;
+    max-height:260px;
+  }
+
+  table{ width:100%; border-collapse:collapse; margin-top:20px; background:#fff;
+    border-radius:14px; overflow:hidden; box-shadow:0 6px 14px rgba(0,0,0,.05);}
+  th,td{ padding:10px; }
+  th{ background:#e9eefc; text-transform:uppercase; font-size:12px; }
+  tr:nth-child(even){ background:#f8f9ff; }
+
+  .due-high{ color:#c0392b; font-weight:bold; }
+  .due-zero{ color:#27ae60; font-weight:bold; }
+
+  footer{ text-align:center; padding:10px; font-size:12px; color:#777; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+
+<body>
+
+<header>Student Fees Dashboard — Upload Excel</header>
+
+<div class="container">
+
+  <div class="upload-box">
+    <b>Upload Excel (.xlsx / .xls)</b><br>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+
+    <button id="pdfBtn"
+      style="background:#2e6df6;color:white;padding:10px 16px;border-radius:8px;border:none;cursor:pointer;margin-bottom:14px;">
+      Download PDF Report
+    </button>
+
+    <button id="studentPdfBtn"
+      style="background:#00a86b;color:white;padding:10px 16px;border-radius:8px;border:none;cursor:pointer;margin-left:10px;">
+      Download Student Fee Card
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters">
+    <select id="courseFilter"><option value="ALL">All Courses</option></select>
+    <select id="batchFilter"><option value="ALL">All Batch Codes</option></select>
+    <!-- NEW -->
+    <select id="batchStatusFilter">
+        <option value="ALL">All Batch Status</option>
+        <option value="active">Active</option>
+        <option value="upcoming">Upcoming</option>
+        <option value="completed">Completed</option>
+    </select>
+    <input id="searchBox" type="text" placeholder="Search name or phone">
+  </div>
+
+  <!-- Student cards -->
+  <div class="cards">
+    <div class="card"><h3>Total Students</h3><p id="totalStudents">0</p></div>
+    <div class="card"><h3>Total Revenue</h3><p id="totalRevenue">₹ 0</p></div>
+    <div class="card"><h3>Total Collected</h3><p id="totalCollected">₹ 0</p></div>
+    <div class="card"><h3>Total Due</h3><p id="totalDue">₹ 0</p></div>
+    <div class="card"><h3>Collection %</h3><p id="collectionPercent">0%</p></div>
+  </div>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <!-- Student charts -->
+  <div class="charts">
+    <div class="chart-box"><canvas id="byCourse"></canvas></div>
+    <div class="chart-box"><canvas id="dueChart"></canvas></div>
+    <div class="chart-box"><canvas id="dailyChart"></canvas></div>
+    <div class="chart-box"><canvas id="modeChart"></canvas></div>
+  </div>
+
+  <h2>Batch Metrics</h2>
+
+  <!-- Batch cards -->
+  <div class="cards">
+    <div class="card"><h3>Total Batches</h3><p id="totalBatches">0</p></div>
+    <div class="card"><h3>Active Batches</h3><p id="activeBatches">0</p></div>
+    <div class="card"><h3>Upcoming Batches</h3><p id="upcomingBatches">0</p></div>
+    <div class="card"><h3>Completed Batches</h3><p id="completedBatches">0</p></div>
+  </div>
+
+  <!-- Batch charts -->
+  <div class="charts">
+    <div class="chart-box"><canvas id="joinChart"></canvas></div>
+    <div class="chart-box"><canvas id="batchStatusChart"></canvas></div>
+    <div class="chart-box"><canvas id="batchCourseChart"></canvas></div>
+  </div>
+
+  <!-- Tables -->
+  <h2>Student Fee Details</h2>
+  <table id="studentsTable">
+    <thead>
+      <tr>
+        <th>SID</th><th>Student Name</th><th>Phone</th><th>Batch</th>
+        <th>Course</th><th>Final Fees</th><th>Total Paid</th><th>Due</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Defaulters Report</h2>
+  <table id="defaultersTable">
+    <thead>
+      <tr>
+        <th>SID</th><th>Name</th><th>Phone</th><th>Batch</th>
+        <th>Course</th><th>Final Fees</th><th>Paid</th><th>Due</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+</div>
+
+<footer>Dynamic Dashboard — Excel Powered</footer>
+
+<script>
+/* ================= STATE ================= */
+let master=[], payments=[], merged=[], batches=[];
+let barChart, pieChart, dailyChart, modeChart, joinChart, batchStatusChart, batchCourseChart;
+
+
+/* ================= ELEMENTS ================= */
+const fileInput=document.getElementById("fileInput");
+const courseFilter=document.getElementById("courseFilter");
+const batchFilter=document.getElementById("batchFilter");
+const searchBox=document.getElementById("searchBox");
+
+const totalStudentsEl=document.getElementById("totalStudents");
+const totalRevenueEl=document.getElementById("totalRevenue");
+const totalCollectedEl=document.getElementById("totalCollected");
+const totalDueEl=document.getElementById("totalDue");
+const collectionPercentEl=document.getElementById("collectionPercent");
+
+const byCourse=document.getElementById("byCourse");
+const dueChart=document.getElementById("dueChart");
+const dailyChartEl=document.getElementById("dailyChart");
+const modeChartEl=document.getElementById("modeChart");
+const studentsTable=document.getElementById("studentsTable");
+const defaultersTable=document.getElementById("defaultersTable");
+const batchStatusFilter = document.getElementById("batchStatusFilter");
+
+/* ================= HELPERS ================= */
+function toNumber(v){ return v ? Number(String(v).replace(/[^0-9.-]/g,"")) : 0; }
+
+function parseExcelDate(v){
+  if (!v) return null;
+  if (!isNaN(v)) return new Date(Math.round((v-25569)*86400*1000));
+  const p=String(v).replace(/\/|\\/g,"-").split("-");
+  if (p.length===3) return new Date(p[2],p[1]-1,p[0]);
+  return new Date(v);
+}
+
+function excelToDisplayDate(v) {
+  const d = parseExcelDate(v);
+  if (!d || isNaN(d)) return v;
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+/* ================= LOAD EXCEL ================= */
+fileInput.addEventListener("change", e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+
+  reader.onload=evt=>{
+    const workbook=XLSX.read(evt.target.result,{type:"array"});
+
+    /* ---- Student Master ---- */
+    const masterSheet=workbook.Sheets["Student Master Data"];
+    if(!masterSheet){alert("Student Master Data sheet missing");return;}
+
+    master = XLSX.utils.sheet_to_json(masterSheet,{defval:""}).map(r => ({
+      sid: r["SID"],
+      name: r["Student Name"],
+      phone: String(r["Phone Number"]),
+      batch: r["Batch Code"],
+      course: r["Course"],
+      joinDate: r["Joining Date"],          // 👈 NEW
+      final: toNumber(r["Final Fees"]),
+      paid: toNumber(r["Total Paid"]),
+      due: toNumber(r["Due Amount"]),
+      source: r["Source"]
+    }));
+
+
+    /* ---- Payments ---- */
+    const paymentSheet=workbook.Sheets["Daily Payments"];
+    if(!paymentSheet){alert("Daily Payments sheet missing");return;}
+
+    payments=XLSX.utils.sheet_to_json(paymentSheet,{defval:""}).map(r=>({
+      sid:r["SID"], date:r["Date"], amount:toNumber(r["Amount Paid"]),
+      mode:r["Payment Mode"], term:r["Term"], course:r["Course"], batch:r["Batch Code"]
+    }));
+
+    /* ---- Batches ---- */
+    const batchSheet=workbook.Sheets["Batch Mgmt"];
+    if(batchSheet){
+      batches=XLSX.utils.sheet_to_json(batchSheet,{defval:""}).map(r=>({
+        code:r["Batch Code"],
+        course:r["Course"],
+        start:r["Start Date"],
+        end:r["End Date"],
+        status:r["Status"]
+      }));
+    }
+
+    mergeData();
+    buildFilters();
+    renderDashboard();
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+
+/* ================= MERGE ================= */
+function mergeData(){
+  const payMap={};
+  payments.forEach(p=>{
+    if(!payMap[p.sid]) payMap[p.sid]=[];
+    payMap[p.sid].push(p);
+  });
+
+  merged=master.map(s=>{
+    const sp=payMap[s.sid]||[];
+    const totalPaid=sp.reduce((a,b)=>a+b.amount,0);
+    const due=s.final-totalPaid;
+    return {...s, paid:totalPaid, due:due<0?0:due, payments:sp};
+  });
+}
+
+/* ================= FILTER OPTIONS ================= */
+function buildFilters(){
+  courseFilter.innerHTML=`<option value="ALL">All Courses</option>`;
+  batchFilter.innerHTML =`<option value="ALL">All Batch Codes</option>`;
+
+  [...new Set(merged.map(s=>s.course))].forEach(c=>{
+    courseFilter.innerHTML+=`<option value="${c}">${c}</option>`;
+  });
+
+  const batchMap={};
+  merged.forEach(s=> batchMap[s.batch]=(batchMap[s.batch]||0)+1 );
+
+  Object.keys(batchMap).forEach(b=>{
+    batchFilter.innerHTML+=`<option value="${b}">${b} (${batchMap[b]} Students)</option>`;
+  });
+}
+
+function inr(v) {
+  return Number(v || 0).toLocaleString("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0
+  });
+}
+
+/* ================= DASHBOARD ================= */
+function renderDashboard(){
+  if(!merged.length) return;
+
+  const filtered = merged.filter(s =>
+    (courseFilter.value==="ALL"||s.course===courseFilter.value) &&
+    (batchFilter.value==="ALL" ||s.batch===batchFilter.value) &&
+    (searchBox.value==="" ||
+      s.name.toLowerCase().includes(searchBox.value.toLowerCase()) ||
+      s.phone.includes(searchBox.value))
+  );
+
+  const totalStudents=filtered.length;
+  const totalRevenue =filtered.reduce((a,b)=>a+b.final,0);
+  const totalCollected=filtered.reduce((a,b)=>a+b.paid,0);
+  const totalDue=filtered.reduce((a,b)=>a+b.due,0);
+  const percent=totalRevenue?((totalCollected/totalRevenue)*100).toFixed(2):0;
+
+  totalStudentsEl.textContent=totalStudents;
+  totalRevenueEl.textContent="₹ "+totalRevenue.toLocaleString();
+  totalCollectedEl.textContent="₹ "+totalCollected.toLocaleString();
+  totalDueEl.textContent="₹ "+totalDue.toLocaleString();
+  collectionPercentEl.textContent=percent+"%";
+
+  /* ---- Course stats ---- */
+  const courseStats={}, courseCounts={};
+  filtered.forEach(s=>{
+    if(!courseStats[s.course]) courseStats[s.course]={collected:0,due:0};
+    courseStats[s.course].collected+=s.paid;
+    courseStats[s.course].due+=s.due;
+    courseCounts[s.course]=(courseCounts[s.course]||0)+1;
+  });
+
+ /* ---- Bar: Student Count ---- */
+  if (barChart) barChart.destroy();
+
+  barChart = new Chart(byCourse, {
+    type: "bar",
+    data: {
+      labels: Object.keys(courseCounts),
+      datasets: [
+        {
+          label: "Students Count",
+          data: Object.values(courseCounts)
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        title: {
+          display: true,
+          text: "Course-wise Student Count"
+        },
+
+        // ⭐ show count above each bar
+        datalabels: {
+          anchor: "end",
+          align: "top",
+          font: { weight: "bold" },
+          formatter: value => value
+        }
+      },
+
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 }
+        }
+      }
+    },
+
+    plugins: [ChartDataLabels]
+  });
+
+
+  /* ---- Monthly Income Trend (Line Chart) ---- */
+const incomeMonthMap = {};
+
+// Use ALL payments (not filtered students)
+payments.forEach(p => {
+  const d = parseExcelDate(p.date);
+  if (!d || isNaN(d)) return;
+
+  const key =
+    d.toLocaleString("en-us", { month: "short" }) +
+    "-" +
+    d.getFullYear();
+
+  incomeMonthMap[key] = (incomeMonthMap[key] || 0) + p.amount;
+});
+
+// Sort months correctly
+const incomeLabels = Object.keys(incomeMonthMap)
+  .sort((a, b) => new Date("01-" + a) - new Date("01-" + b));
+
+const incomeValues = incomeLabels.map(m => incomeMonthMap[m]);
+
+if (pieChart) pieChart.destroy();
+
+pieChart = new Chart(dueChart, {
+  type: "line",
+  plugins: [ChartDataLabels],
+  data: {
+    labels: incomeLabels,
+    datasets: [
+      {
+        label: "Monthly Income (INR)",
+        data: incomeValues,
+        fill: false,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      title: {
+        display: true,
+        text: "Monthly Income Trend"
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx =>
+            "₹ " + Number(ctx.parsed.y).toLocaleString("en-IN")
+        }
+      },
+      datalabels: {
+        align: "top",
+        anchor: "end",
+        formatter: v => "₹ " + Number(v).toLocaleString("en-IN"),
+        font: { size: 9 }
+      }
+    },
+
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: v => "₹ " + Number(v).toLocaleString("en-IN")
+        }
+      }
+    }
+  }
+});
+
+ /* ---- Monthly Trend ---- */
+const monthMap = {};
+payments.forEach(p => {
+  const d = parseExcelDate(p.date);
+  if (!d || isNaN(d)) return;
+
+  const k = d.toLocaleString("en-us", { month: "short" }) + "-" + d.getFullYear();
+  monthMap[k] = (monthMap[k] || 0) + p.amount;
+});
+
+if (dailyChart) dailyChart.destroy();
+
+const monthLabels = Object.keys(monthMap)
+  .sort((a,b)=> new Date("01-"+a) - new Date("01-"+b));
+
+const monthValues = monthLabels.map(m => monthMap[m]);
+
+dailyChart = new Chart(dailyChartEl, {
+    type: "bar",
+    plugins: [ChartDataLabels],
+    data: {
+      labels: monthLabels,
+      datasets: [
+        {
+          label: "Monthly Income (INR)",
+          data: monthValues
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        title: { display: true, text: "Monthly Income Trend (Bar Chart)" },
+
+        tooltip: {
+          callbacks: {
+            label: (ctx) =>
+              "INR " + Number(ctx.parsed.y).toLocaleString("en-IN")
+          }
+        },
+
+        datalabels: {
+          anchor: "end",
+          align: "top",
+          font: { size: 10 },
+          formatter: (value) =>
+            "₹ " + Number(value).toLocaleString("en-IN")
+        }
+      },
+
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: v => "₹ " + Number(v).toLocaleString("en-IN")
+          }
+        }
+      }
+    }
+  });
+
+/* ---- Source-wise Student Count ---- */
+const sourceMap = {};
+
+filtered.forEach(s => {
+  const src = s.source || "Unknown";
+  sourceMap[src] = (sourceMap[src] || 0) + 1;
+});
+
+const sourceLabels = Object.keys(sourceMap);
+const sourceValues = Object.values(sourceMap);
+
+if (modeChart) modeChart.destroy();
+
+modeChart = new Chart(modeChartEl, {
+  type: "bar",
+  plugins: [ChartDataLabels],
+  data: {
+    labels: sourceLabels,
+    datasets: [
+      {
+        label: "Students Count",
+        data: sourceValues
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      title: {
+        display: true,
+        text: "Student Source-wise Distribution"
+      },
+      datalabels: {
+        anchor: "end",
+        align: "top",
+        font: { weight: "bold" },
+        formatter: value => value
+      }
+    },
+
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { precision: 0 }
+      }
+    }
+  }
+});
+
+     /* ---- Student Joining by Month ---- */
+  const joinMap = {};
+
+  filtered.forEach(s => {
+    if (!s.joinDate) return;
+
+    const d = parseExcelDate(s.joinDate);
+    if (!d || isNaN(d)) return;
+
+    const key =
+      d.toLocaleString("en-us", { month: "short" }) +
+      "-" +
+      d.getFullYear();
+
+    joinMap[key] = (joinMap[key] || 0) + 1;
+  });
+
+  const joinLabels = Object.keys(joinMap)
+    .sort((a, b) => new Date("01-" + a) - new Date("01-" + b));
+
+  const joinValues = joinLabels.map(m => joinMap[m]);
+
+  if (joinChart) joinChart.destroy();
+
+  joinChart = new Chart(document.getElementById("joinChart"), {
+    type: "bar",
+    data: {
+      labels: joinLabels,
+      datasets: [
+        {
+          label: "Students Joined",
+          data: joinValues
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        title: { 
+          display: true, 
+          text: "Student Joining by Month" 
+        },
+
+        // ⭐ SHOW COUNT ON EACH BAR
+        datalabels: {
+          anchor: "end",
+          align: "top",
+          font: { weight: "bold" },
+          formatter: value => value   // <- prints the student count
+        }
+      },
+
+      scales: {
+        y: { 
+          beginAtZero: true, 
+          ticks: { precision: 0 } 
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+
+
+  /* ---- Tables ---- */
+  const tbody=studentsTable.querySelector("tbody");
+  tbody.innerHTML="";
+  filtered.forEach(s=>{
+    tbody.innerHTML+=`
+      <tr>
+        <td>${s.sid}</td><td>${s.name}</td><td>${s.phone}</td>
+        <td>${s.batch}</td><td>${s.course}</td>
+        <td>₹ ${s.final.toLocaleString()}</td>
+        <td>₹ ${s.paid.toLocaleString()}</td>
+        <td class="${s.due===0?'due-zero':(s.due>10000?'due-high':'')}">
+        ₹ ${s.due.toLocaleString()}</td>
+      </tr>`;
+  });
+
+  const defBody=defaultersTable.querySelector("tbody");
+  defBody.innerHTML="";
+  filtered.filter(s=>s.due>0).forEach(s=>{
+    defBody.innerHTML+=`
+      <tr>
+        <td>${s.sid}</td><td>${s.name}</td><td>${s.phone}</td>
+        <td>${s.batch}</td><td>${s.course}</td>
+        <td>₹ ${s.final.toLocaleString()}</td>
+        <td>₹ ${s.paid.toLocaleString()}</td>
+        <td class="due-high">₹ ${s.due.toLocaleString()}</td>
+      </tr>`;
+  });
+
+  renderBatchMetrics();
+}
+
+/* ================= BATCH METRICS ================= */
+function renderBatchMetrics() {
+  if (!batches.length) return;
+
+  let filteredBatches = [...batches];
+
+  // Apply batch status filter
+  if (batchStatusFilter.value !== "ALL") {
+    filteredBatches = filteredBatches.filter(
+      b => (b.status || "").toLowerCase() === batchStatusFilter.value
+    );
+  }
+
+  const total = filteredBatches.length;
+  const active = filteredBatches.filter(b => (b.status || "").toLowerCase() === "active").length;
+  const upcoming = filteredBatches.filter(b => (b.status || "").toLowerCase() === "upcoming").length;
+  const completed = filteredBatches.filter(b => (b.status || "").toLowerCase() === "completed").length;
+
+  document.getElementById("totalBatches").innerText = total;
+  document.getElementById("activeBatches").innerText = active;
+  document.getElementById("upcomingBatches").innerText = upcoming;
+  document.getElementById("completedBatches").innerText = completed;
+
+  /* ---- Status Chart ---- */
+  if (batchStatusChart) batchStatusChart.destroy();
+  batchStatusChart = new Chart(document.getElementById("batchStatusChart"), {
+    type: "pie",
+    data: {
+      labels: ["Active", "Upcoming", "Completed"],
+      datasets: [{ data: [active, upcoming, completed] }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { title: { display: true, text: "Batch Status Distribution" } }
+    }
+  });
+
+  /* ---- Course-wise batch count ---- */
+  /* ---- Course-wise batch count ---- */
+  const courseMap = {};
+  filteredBatches.forEach(
+    b => courseMap[b.course] = (courseMap[b.course] || 0) + 1
+  );
+
+  if (batchCourseChart) batchCourseChart.destroy();
+
+  batchCourseChart = new Chart(document.getElementById("batchCourseChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(courseMap),
+      datasets: [
+        {
+          label: "No. of Batches",
+          data: Object.values(courseMap)
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+
+      plugins: {
+        title: { 
+          display: true, 
+          text: "Course-wise Batch Count" 
+        },
+
+        // ⭐ show value on top of each bar
+        datalabels: {
+          anchor: "end",
+          align: "top",
+          font: { weight: "bold" },
+          formatter: value => value
+        }
+      },
+
+      scales: {
+        y: { 
+          beginAtZero: true,
+          ticks: { precision: 0 }
+        }
+      }
+    },
+
+    plugins: [ChartDataLabels]
+  });
+
+}
+
+/* ================= FILTER EVENTS ================= */
+courseFilter.addEventListener("change",renderDashboard);
+batchFilter.addEventListener("change",renderDashboard);
+searchBox.addEventListener("input",renderDashboard);
+batchStatusFilter.addEventListener("change", renderBatchMetrics);
+
+/* ================= PDF HELPERS ================= */
+function getStudentBySID(sid){ return merged.find(s=>s.sid===sid); }
+
+/* ================= REPORT PDF ================= */
+
+const pdfBtn=document.getElementById("pdfBtn");
+
+pdfBtn.addEventListener("click",()=>{
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+
+  // Read values from UI and convert safely
+  const revenueVal   = Number(totalRevenueEl.innerText.replace(/[^0-9.-]/g,"")) || 0;
+  const collectedVal = Number(totalCollectedEl.innerText.replace(/[^0-9.-]/g,"")) || 0;
+  const dueVal       = Number(totalDueEl.innerText.replace(/[^0-9.-]/g,"")) || 0;
+  const studentCount = totalStudentsEl.innerText || "0";
+  const percentVal   = collectionPercentEl.innerText || "0%";
+
+  doc.setFontSize(16);
+  doc.text("Student Fees Dashboard Report",14,15);
+  doc.setFontSize(10);
+  doc.text("Generated: "+new Date().toLocaleString(),14,22);
+
+  doc.text("Summary",14,32);
+  doc.autoTable({
+    startY: 36,
+    head: [["Metric","Value"]],
+    body: [
+      ["Total Students", studentCount],
+      ["Total Revenue", "Rs. " + revenueVal.toLocaleString("en-IN")],
+      ["Collected", "Rs. " + collectedVal.toLocaleString("en-IN")],
+      ["Due", "Rs. " + dueVal.toLocaleString("en-IN")],
+      ["Collection %", percentVal],
+    ]
+  });
+
+  doc.text("Defaulters",14,doc.lastAutoTable.finalY+14);
+
+  const rows=[];
+  document.querySelectorAll("#defaultersTable tbody tr").forEach(tr => {
+  const cols = [...tr.children].map(td => td.innerText);
+
+  // Clean and format currency columns
+  [5, 6, 7].forEach(i => {
+      const num = Number(String(cols[i]).replace(/[^0-9.-]/g, "")) || 0;
+      cols[i] = "Rs. " + num.toLocaleString("en-IN");
+    });
+
+    rows.push(cols);
+  });
+
+  if(rows.length){
+    doc.autoTable({
+      startY:doc.lastAutoTable.finalY+18,
+      head:[["SID","Name","Phone","Batch","Course","Final","Paid","Due"]],
+      body:rows, styles:{fontSize:9}
+    });
+  } else {
+    doc.text("No defaulters 🎉",14,doc.lastAutoTable.finalY+20);
+  }
+
+  doc.save("Student_Fees_Report.pdf");
+});
+
+/* ================= STUDENT FEE CARD ================= */
+studentPdfBtn.addEventListener("click",()=>{
+  if(!merged.length){alert("Upload Excel first");return;}
+
+  const sid=prompt(
+    "Enter SID (ex: MR2026003)\n\n"+merged.map(s=>s.sid+" - "+s.name).join("\n")
+  );
+  if(!sid) return;
+
+  const s=getStudentBySID(sid.trim());
+  if(!s){alert("Invalid SID");return;}
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+
+  doc.setFontSize(16);
+  doc.text("Student Fee Card",14,15);
+
+  doc.setFontSize(10);
+  doc.text("Generated: "+new Date().toLocaleString(),14,22);
+
+  doc.text("Student Details",14,32);
+  doc.autoTable({
+    startY:36,
+    head:[["Field","Value"]],
+    body:[
+      ["SID",s.sid],["Name",s.name],["Phone",s.phone],
+      ["Course",s.course],["Batch",s.batch]
+    ]
+  });
+
+  doc.text("Fee Summary",14,doc.lastAutoTable.finalY+14);
+  doc.autoTable({
+    startY:doc.lastAutoTable.finalY+18,
+    head:[["Description","Amount"]],
+    body:[
+      ["Final Fees","INR "+s.final.toLocaleString()],
+      ["Paid","INR "+s.paid.toLocaleString()],
+      ["Due","INR "+s.due.toLocaleString()]
+    ]
+  });
+
+  doc.text("Payment History",14,doc.lastAutoTable.finalY+14);
+
+  if (!s.payments.length) {
+    doc.text("No payments found", 14, doc.lastAutoTable.finalY + 22);
+  } else {
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 18,
+      head: [["Date","Amount","Mode","Term"]],
+      body: s.payments.map(p => [
+        excelToDisplayDate(p.date),
+        "INR " + Number(p.amount || 0).toLocaleString("en-IN"),
+        p.mode,
+        p.term
+      ]),
+      styles:{ fontSize: 9 }
+    });
+  }
+
+  doc.save(`${s.sid}_Fee_Card.pdf`);
+});
+</script>
+
+</body>
+</html>
