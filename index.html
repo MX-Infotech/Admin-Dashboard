@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Student Information System</title>
+<title>Student Fees Dashboard</title>
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -58,6 +58,34 @@
     max-height:260px;
   }
 
+  .app-header{
+  background: var(--primary);
+  color: #fff;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+}
+
+.header-left{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo{
+  height: 40px;
+  width: auto;
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px;
+}
+
+.title{
+  font-size: 20px;
+  font-weight: bold;
+}
+
+
   table{ width:100%; border-collapse:collapse; margin-top:20px; background:#fff;
     border-radius:14px; overflow:hidden; box-shadow:0 6px 14px rgba(0,0,0,.05);}
   th,td{ padding:10px; }
@@ -74,7 +102,12 @@
 
 <body>
 
-<header>Student Information Dashboard — Upload Excel</header>
+<header class="app-header">
+  <div class="header-left">
+    <img src="logo.png" alt="Company Logo" class="logo">
+    <span class="title">Student Information Dashboard — Upload Excel</span>
+  </div>
+</header>
 
 <div class="container">
 
@@ -898,6 +931,4 @@ studentPdfBtn.addEventListener("click",()=>{
 </script>
 
 </body>
-
 </html>
-
